@@ -1,0 +1,1409 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1280">
+<meta name="theme-color" content="#2D5F3E">
+<title>캐디 가용표 (보기)</title>
+<link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.8/dist/web/static/pretendard.css" />
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-app.js";
+    import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-database.js";
+    
+    const firebaseConfig = {
+        apiKey: "AIzaSyDbQyd-b5StGfOf33kDYQZd8-bw3mJETPg",
+        authDomain: "yjsw-grand.firebaseapp.com",
+        databaseURL: "https://yjsw-grand-default-rtdb.asia-southeast1.firebasedatabase.app",
+        projectId: "yjsw-grand",
+        storageBucket: "yjsw-grand.firebasestorage.app",
+        messagingSenderId: "572650294249",
+        appId: "1:572650294249:web:c55f616bf51707154f9978"
+    };
+    
+    const fbApp = initializeApp(firebaseConfig);
+    const fbDb = getDatabase(fbApp);
+    
+    window.fbRef = ref;
+    window.fbOnValue = onValue;
+    window.fbDatabase = fbDb;
+    
+    // 진단용 로그
+    function diagLog(msg) {
+        let el = document.getElementById('diag_log');
+        if(el) {
+            let now = new Date();
+            let ts = ('0' + now.getMinutes()).slice(-2) + ':' + ('0' + now.getSeconds()).slice(-2);
+            el.textContent += '\n[' + ts + '] ' + msg;
+        }
+        console.log('[Firebase]', msg);
+    }
+    window.diagLog = diagLog;
+    
+    diagLog('Firebase SDK 로드 완료');
+    
+    // ★ 로그인 없이 바로 시작 (보안 규칙에서 read는 누구나 허용)
+    let alreadyStarted = false;
+    function tryStart() {
+        if(alreadyStarted) return;
+        if(typeof startViewer === 'function') {
+            alreadyStarted = true;
+            diagLog('startViewer 호출');
+            startViewer();
+        } else {
+            setTimeout(tryStart, 200);
+        }
+    }
+    tryStart();
+    
+    // 안전망: 10초 안에 못 시작하면 에러
+    setTimeout(() => {
+        if(!alreadyStarted) {
+            diagLog('⚠️ 10초 타임아웃');
+            if(typeof showError === 'function') showError('연결이 너무 오래 걸립니다. 화면을 새로고침해주세요.');
+        }
+    }, 10000);
+</script>
+
+<style>
+:root {
+    --primary: #2D5F3E;
+    --primary-light: #4A8B5C;
+    --secondary: #FF9F45;
+    --accent: #FFD166;
+    --sky: #5BA9E0;
+    --bg-color: #FFF8EC;
+    --bg-card: #FFFEFC;
+    --text-main: #2A2A3F;
+    --text-muted: #6B6B8A;
+    --text-soft: #9B9BB5;
+    --border-strong: #2A2A3F;
+    --border-light: #D8D2C4;
+}
+
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+body {
+    margin: 0;
+    padding: 10px;
+    font-family: 'Pretendard', 'Malgun Gothic', sans-serif;
+    background: var(--bg-color);
+    color: var(--text-main);
+    letter-spacing: -0.01em;
+    min-width: 1280px;
+    background-image:
+        radial-gradient(circle at 10% 20%, rgba(255, 209, 102, 0.08) 0%, transparent 50%),
+        radial-gradient(circle at 90% 80%, rgba(91, 169, 224, 0.06) 0%, transparent 50%);
+    background-attachment: fixed;
+}
+
+.fullscreen {
+    position: fixed;
+    inset: 0;
+    background: linear-gradient(135deg, #FFF8EC 0%, #FFEED4 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 16px;
+    z-index: 1000;
+}
+.fullscreen .icon { font-size: 60px; }
+.fullscreen .icon.spin { animation: spin 2s linear infinite; }
+.fullscreen .text { font-size: 14px; font-weight: 900; color: var(--primary); }
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+.dashboard {
+    background: linear-gradient(135deg, #2D5F3E 0%, #1A3D2A 50%, #143524 100%);
+    padding: 16px 20px;
+    border-radius: 20px;
+    margin-bottom: 14px;
+    box-shadow: 0 20px 40px rgba(20, 53, 36, 0.25), inset 0 1px 0 rgba(255,255,255,0.15);
+    color: white;
+    position: relative;
+    overflow: hidden;
+}
+.dashboard::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    right: -10%;
+    width: 60%;
+    height: 200%;
+    background: radial-gradient(ellipse, rgba(255, 209, 102, 0.08) 0%, transparent 60%);
+    pointer-events: none;
+}
+
+.dash-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    position: relative;
+    z-index: 1;
+}
+
+.dash-title {
+    font-size: 22px;
+    font-weight: 900;
+    letter-spacing: -0.03em;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.15);
+}
+.dash-icon {
+    background: linear-gradient(135deg, #FFD166, #FF9F45);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    font-size: 28px;
+}
+
+.sync-indicator {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    background: rgba(255,255,255,0.12);
+    border: 1.5px solid rgba(255,255,255,0.20);
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 900;
+}
+.sync-dot {
+    width: 8px;
+    height: 8px;
+    background: #22c55e;
+    border-radius: 50%;
+    box-shadow: 0 0 6px rgba(34,197,94,0.7);
+    animation: pulse 2s infinite;
+}
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+.date-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 12px;
+    position: relative;
+    z-index: 1;
+}
+.date-btn {
+    background: rgba(255,255,255,0.18);
+    color: white;
+    border: 1.5px solid rgba(255,255,255,0.25);
+    padding: 8px 14px;
+    border-radius: 12px;
+    font-weight: 900;
+    font-size: 14px;
+    cursor: pointer;
+    backdrop-filter: blur(8px);
+    transition: all 0.2s ease;
+}
+.date-btn:hover { background: rgba(255,255,255,0.28); }
+.date-btn:active { transform: scale(0.95); }
+.date-input {
+    background: white;
+    border: 1.5px solid rgba(255,255,255,0.25);
+    padding: 9px 14px;
+    border-radius: 12px;
+    font-weight: 900;
+    font-size: 15px;
+    color: var(--text-main);
+    text-align: center;
+    cursor: pointer;
+    font-family: inherit;
+    min-width: 165px;
+}
+
+.tabs-wrapper {
+    margin-bottom: 14px;
+    text-align: center;
+    width: 100%;
+}
+.tabs {
+    display: inline-flex;
+    background: linear-gradient(135deg, #E8E0CC 0%, #DCD3BD 100%);
+    padding: 5px;
+    border-radius: 16px;
+    gap: 5px;
+    width: 100%;
+    box-shadow: inset 0 2px 4px rgba(45,95,62,0.08);
+}
+.tab {
+    flex: 1;
+    padding: 13px 12px;
+    cursor: pointer;
+    font-weight: 900;
+    border-radius: 11px;
+    font-size: 15px;
+    color: var(--text-muted);
+    transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+    text-align: center;
+    letter-spacing: -0.01em;
+}
+.tab.act {
+    background: white;
+    color: var(--primary);
+    box-shadow: 0 4px 12px rgba(45,95,62,0.15);
+    transform: translateY(-1px);
+}
+
+.view-container {
+    background: var(--bg-card);
+    padding: 16px;
+    border-radius: 20px;
+    box-shadow: 0 8px 20px rgba(45, 95, 62, 0.08), inset 0 1px 0 rgba(255,255,255,0.8);
+    border: 2px solid rgba(216, 210, 196, 0.4);
+}
+
+.summary-box {
+    background: #FFFEFC;
+    padding: 12px 14px;
+    border-radius: 12px;
+    margin-bottom: 14px;
+    font-weight: 800;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    border: 2.5px solid var(--border-strong);
+    font-size: 14px;
+}
+
+.r-grid {
+    display: grid;
+    grid-template-columns: repeat(10, 1fr);
+    background: var(--border-strong);
+    border-radius: 10px;
+    overflow: hidden;
+    gap: 1px;
+    border: 2px solid var(--border-strong);
+}
+.rc {
+    display: flex;
+    justify-content: space-between;
+    align-items: stretch;
+    min-height: 48px;
+    background: white;
+    padding: 4px;
+    gap: 4px;
+}
+.rc.cu { background: #f1f5f9; }
+.rc.fixed { background: #fef2f2 !important; border: 2px solid #ef4444 !important; }
+.rc.ex {
+    background: #f8fafc !important;
+    justify-content: center;
+    align-items: center;
+}
+.rc-left-badge {
+    flex: 0 0 50px;
+    display: flex;
+    flex-direction: column;
+    border-radius: 6px;
+    overflow: hidden;
+    border: 1px solid #cbd5e1;
+    background: white;
+    flex-shrink: 0;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+}
+.name-len-default {
+    font-size: 12px;
+    letter-spacing: -0.5px;
+}
+.name-len-long {
+    font-size: 10px;
+    letter-spacing: -1px;
+    padding: 0 2px;
+}
+.stat {
+    flex: 1;
+    display: flex;
+    flex-wrap: nowrap;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 4px;
+    padding-left: 2px;
+    overflow-x: auto;
+    white-space: nowrap;
+    scrollbar-width: none;
+}
+.stat::-webkit-scrollbar { display: none; }
+
+.deploy-wrapper {
+    display: flex;
+    gap: 14px;
+    overflow-x: auto;
+    padding-bottom: 10px;
+}
+.d-col {
+    flex: 1;
+    min-width: 320px;
+    border-radius: 14px;
+    overflow: hidden;
+    background: white;
+    box-shadow: 0 8px 16px rgba(45,95,62,0.10);
+}
+.d-title {
+    text-align: center;
+    padding: 8px;
+    font-weight: 900;
+    font-size: 16px;
+}
+.d-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+.d-table td {
+    padding: 4px 6px;
+    text-align: center;
+    font-weight: 900;
+    vertical-align: middle;
+    background: white;
+}
+.d-table .d-rank {
+    width: 36px;
+    font-size: 12px;
+    color: var(--text-muted);
+}
+.scroll-hide {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 24px;
+    padding: 0 4px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    white-space: nowrap;
+    scrollbar-width: none;
+}
+.scroll-hide::-webkit-scrollbar { display: none; }
+.cell-with-add {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    height: 24px;
+    padding: 0 6px;
+    white-space: nowrap;
+}
+.cell-with-add > div { width: 100% !important; }
+
+/* PC 화면 스타일로 고정 (폰에서도 동일하게 표시, 사용자가 핀치로 줌인/줌아웃) */
+</style>
+</head>
+<body>
+
+<div id="loading" class="fullscreen">
+    <div class="icon spin">⛳</div>
+    <div class="text">불러오는 중...</div>
+    <pre id="diag_log" style="font-size:10px; color:var(--text-soft); max-width:90%; max-height:200px; overflow:auto; background:rgba(0,0,0,0.04); padding:8px; border-radius:8px; font-family:monospace; line-height:1.5; white-space:pre-wrap; word-break:break-all; margin:8px 0 0;"></pre>
+    <button onclick="location.reload()" style="padding:10px 24px; background:var(--primary); color:white; border:none; border-radius:10px; font-weight:900; font-size:13px; cursor:pointer; margin-top:12px;">🔄 새로고침</button>
+</div>
+
+<div id="error_overlay" class="fullscreen" style="display:none;">
+    <div class="icon">⚠️</div>
+    <div class="text" id="error_msg">서버 연결 실패</div>
+    <pre id="error_diag" style="font-size:10px; color:var(--text-soft); max-width:90%; max-height:200px; overflow:auto; background:rgba(0,0,0,0.04); padding:8px; border-radius:8px; font-family:monospace; line-height:1.5; white-space:pre-wrap; word-break:break-all; margin:8px 0 0;"></pre>
+    <button onclick="location.reload()" style="padding:10px 20px; background:var(--primary); color:white; border:none; border-radius:10px; font-weight:900; font-size:13px; cursor:pointer; margin-top:8px;">🔄 다시 시도</button>
+</div>
+
+<div id="main_app" style="display:none;">
+    
+    <div class="dashboard">
+        <div class="dash-row">
+            <div class="dash-title">
+                <span class="dash-icon">⛳</span>
+                <span>스마트 캐디 시스템</span>
+            </div>
+            <div class="sync-indicator">
+                <span class="sync-dot"></span>
+                <span id="update_text">실시간</span>
+            </div>
+        </div>
+        <div class="date-row">
+            <button class="date-btn" onclick="changeDate(-1)">◀ 어제</button>
+            <input type="date" class="date-input" id="date_input" onchange="onDateInputChange()">
+            <button class="date-btn" onclick="changeDate(1)">내일 ▶</button>
+        </div>
+    </div>
+    
+    <div class="tabs-wrapper">
+        <div class="tabs">
+            <div class="tab act" onclick="switchTab('avail')" id="tab_avail">📊 가용표</div>
+            <div class="tab" onclick="switchTab('deploy')" id="tab_deploy">📋 배치표</div>
+            <div class="tab" onclick="switchTab('sim')" id="tab_sim">🔄 내 시뮬레이션</div>
+        </div>
+    </div>
+    
+    <div id="view_avail" class="view-container">
+        <div class="summary-box" id="summary"></div>
+        <div style="width: 100%; overflow-x: auto;">
+            <div class="r-grid" id="result"></div>
+        </div>
+    </div>
+    
+    <div id="view_deploy" class="view-container" style="display:none;">
+        <div class="deploy-wrapper" id="deploy_area"></div>
+    </div>
+    
+    <!-- ★ 내 시뮬레이션 탭 -->
+    <div id="view_sim" class="view-container" style="display:none;">
+        <div style="background:#fffbeb; border:2px solid #f59e0b; border-radius:12px; padding:12px 14px; margin-bottom:14px; font-size:13px; font-weight:800; color:#92400e; line-height:1.6;">
+            💡 <b>본인 폰에만 저장</b>되는 시뮬레이션입니다. 다른 사람에게 영향 없습니다.<br>
+            대기바꿈을 입력하면 <b>배치표 탭</b>에서 결과 확인 가능합니다.
+        </div>
+        
+        <!-- ★ 가로 4컬럼 배치 (전일 | 당일 | 현황 | 체크) -->
+        <div class="sim-grid">
+            
+            <!-- 1) 전일 대기바꿈 -->
+            <div class="sim-card sim-card-prev">
+                <div class="sim-card-header">
+                    <h3 style="margin:0; color:#8e44ad; font-size:14px; font-weight:900;">🌙 전일 대기바꿈</h3>
+                    <button onclick="clearMySim('prev')" class="sim-clear-btn">지우기</button>
+                </div>
+                <div id="sim_prev_list" style="display:flex; flex-direction:column; gap:4px;"></div>
+            </div>
+            
+            <!-- 2) 당일 대기바꿈 -->
+            <div class="sim-card sim-card-today">
+                <div class="sim-card-header">
+                    <h3 style="margin:0; color:#e67e22; font-size:14px; font-weight:900;">☀️ 당일 대기바꿈</h3>
+                    <button onclick="clearMySim('today')" class="sim-clear-btn">지우기</button>
+                </div>
+                <div id="sim_today_list" style="display:flex; flex-direction:column; gap:4px;"></div>
+            </div>
+            
+            <!-- 3) 대기바꿈 현황 -->
+            <div class="sim-card sim-card-history">
+                <div class="sim-card-header">
+                    <h3 style="margin:0; color:#334155; font-size:14px; font-weight:900;">📋 대기바꿈 현황</h3>
+                </div>
+                <div id="sim_history" style="display:flex; flex-direction:column; gap:4px; font-size:12px; min-height:60px;"></div>
+            </div>
+            
+            <!-- 4) 횟수 체크 -->
+            <div class="sim-card sim-card-check">
+                <div class="sim-card-header">
+                    <h3 style="margin:0; color:#0f172a; font-size:14px; font-weight:900;">✅ 횟수 체크</h3>
+                </div>
+                <div style="font-size:10px; color:#64748b; font-weight:700; margin-bottom:6px;">전일 1회, 당일 2회 한도</div>
+                <div id="sim_check" style="display:flex; flex-direction:column; gap:4px; font-size:11px; min-height:30px;"></div>
+            </div>
+            
+        </div>
+        
+        <!-- 안내 -->
+        <div style="text-align:center; padding:10px; color:var(--text-muted); font-size:11px; font-weight:700; margin-top:12px;">
+            💾 입력 즉시 자동 저장됩니다. 폰을 닫아도 다음에 그대로 남아있습니다.
+        </div>
+    </div>
+    
+</div>
+
+<style>
+    /* 시뮬레이션 가로 그리드 */
+    .sim-grid {
+        display: flex;
+        gap: 12px;
+        overflow-x: auto;
+        padding-bottom: 10px;
+        align-items: stretch;
+    }
+    .sim-card {
+        flex: 1;
+        background: white;
+        border: 2px solid var(--border-light);
+        border-radius: 12px;
+        padding: 10px;
+        min-width: 180px;
+    }
+    .sim-card-prev { flex: 1; min-width: 150px; }
+    .sim-card-today { flex: 1; min-width: 150px; }
+    .sim-card-history { flex: 1.6; min-width: 200px; background: #fafbfc; }
+    .sim-card-check { flex: 1.4; min-width: 180px; background: #f8fafc; }
+    
+    .sim-card-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 10px;
+        padding-bottom: 6px;
+        border-bottom: 1.5px solid var(--border-light);
+    }
+    .sim-clear-btn {
+        background: white;
+        color: #e74c3c;
+        border: 1.5px solid #e74c3c;
+        padding: 3px 8px;
+        border-radius: 6px;
+        font-size: 10px;
+        font-weight: 900;
+        cursor: pointer;
+        font-family: inherit;
+    }
+    
+    .sim-row {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        background: #f1f5f9;
+        padding: 4px 6px;
+        border-radius: 6px;
+        border: 1px solid #cbd5e1;
+    }
+    .sim-row .sim-num {
+        font-size: 11px;
+        font-weight: 900;
+        color: var(--text-muted);
+        width: 16px;
+        text-align: right;
+        flex-shrink: 0;
+    }
+    .sim-row input {
+        flex: 1;
+        min-width: 0;
+        padding: 6px 4px;
+        font-size: 14px;
+        border: 1.5px solid var(--border-light);
+        border-radius: 5px;
+        font-weight: 900;
+        text-align: center;
+        font-family: inherit;
+        color: var(--text-main);
+        background: white;
+        box-sizing: border-box;
+        -moz-appearance: textfield;
+    }
+    .sim-row input::-webkit-outer-spin-button,
+    .sim-row input::-webkit-inner-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
+    }
+    .sim-row input:focus {
+        outline: none;
+        border-color: var(--primary-light);
+    }
+    .sim-row .swap-icon {
+        font-size: 12px;
+        color: #8e44ad;
+        font-weight: 900;
+        flex-shrink: 0;
+    }
+    .sim-history-item {
+        background: white;
+        border: 1px solid #e2e8f0;
+        padding: 5px 8px;
+        border-radius: 6px;
+        font-weight: 800;
+        color: var(--text-main);
+        font-size: 12px;
+    }
+    .sim-check-badge {
+        background: white;
+        border: 1.5px solid #cbd5e1;
+        padding: 4px 6px;
+        border-radius: 6px;
+        font-weight: 800;
+        font-size: 11px;
+    }
+    .sim-check-badge.over {
+        background: #fef2f2;
+        border-color: #ef4444;
+        color: #dc2626;
+    }
+</style>
+
+<script>
+    let currentDate = '';
+    let ros = {};
+    let teamInfo = { t1_c: 0, t1_f: 0, t2_c: 0, t2_f: 0, t3_c: 0, t3_f: 0, sn1: 1, sn2: 1, sn3: 1 };
+    let cNames = {};
+    let exited = [];
+    let periodEntries = [];
+    let allFirebaseData = null;
+    let currentTab = 'avail';
+    
+    const displayOrder = [
+        1,6,2,7,3,8,4,9,5,10, 11,16,12,17,13,18,14,19,15,20,
+        21,26,22,27,23,28,24,29,25,30, 31,36,32,37,33,38,34,39,35,40,
+        41,46,42,47,43,48,44,49,45,50, 51,56,52,57,53,58,54,59,55,60,
+        61,66,62,67,63,68,64,69,65,70, 71,76,72,77,73,78,74,79,75,80,
+        81,86,82,87,83,88,84,89,85,90, 91,96,92,97,93,98,94,99,95,100,
+        101,106,102,107,103,108,104,109,105,110, 111,116,112,117,113,118,114,119,115,120,
+        121,126,122,127,123,128,124,129,125,130, 131,136,132,137,133,138,134,139,135,140,
+        141,146,142,147,143,148,144,149,145,150
+    ];
+    
+    const assignOrder = [
+        1,11,21,31,41,51,61,71,81,91,101,111,121,131,141,
+        6,12,22,32,42,52,62,72,82,92,102,112,122,132,142,
+        2,13,23,33,43,53,63,73,83,93,103,113,123,133,143,
+        7,14,24,34,44,54,64,74,84,94,104,114,124,134,144,
+        3,15,25,35,45,55,65,75,85,95,105,115,125,135,145,
+        8,16,26,36,46,56,66,76,86,96,106,116,126,136,146,
+        4,17,27,37,47,57,67,77,87,97,107,117,127,137,147,
+        9,18,28,38,48,58,68,78,88,98,108,118,128,138,148,
+        5,19,29,39,49,59,69,79,89,99,109,119,129,139,149,
+        10,20,30,40,50,60,70,80,90,100,110,120,130,140,150
+    ];
+    
+    function showError(msg) {
+        document.getElementById('loading').style.display = 'none';
+        document.getElementById('error_overlay').style.display = 'flex';
+        document.getElementById('error_msg').textContent = msg;
+        // 진단 로그 복사
+        let diagSrc = document.getElementById('diag_log');
+        let diagDst = document.getElementById('error_diag');
+        if(diagSrc && diagDst) {
+            diagDst.textContent = diagSrc.textContent;
+        }
+    }
+    window.showError = showError;
+    
+    function startViewer() {
+        if(window.diagLog) window.diagLog('startViewer 시작');
+        
+        let today = new Date();
+        let localDate = new Date(today.getTime() - (today.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
+        currentDate = localDate;
+        document.getElementById('date_input').value = localDate;
+        
+        let dataReceived = false;
+        let retryCount = 0;
+        
+        function subscribe() {
+            let dataRef = window.fbRef(window.fbDatabase, 'caddie/data');
+            if(window.diagLog) window.diagLog('데이터 구독 시작' + (retryCount > 0 ? ' (재시도 ' + retryCount + ')' : ''));
+            
+            window.fbOnValue(dataRef, snap => {
+                if(window.diagLog) window.diagLog('데이터 수신!');
+                dataReceived = true;
+                allFirebaseData = snap.val();
+                if(allFirebaseData) {
+                    loadDataForCurrentDate();
+                    renderAll();
+                    
+                    document.getElementById('loading').style.display = 'none';
+                    document.getElementById('main_app').style.display = 'block';
+                    
+                    updateLastRefresh();
+                } else {
+                    if(window.diagLog) window.diagLog('⚠️ 데이터가 비어있음');
+                    showError('데이터가 비어있습니다. 운영자가 가용표를 만들었는지 확인해주세요.');
+                }
+            }, err => {
+                if(window.diagLog) window.diagLog('❌ 데이터 수신 오류: ' + err.code + ' / ' + err.message);
+                if(retryCount < 2) {
+                    retryCount++;
+                    if(window.diagLog) window.diagLog('🔄 3초 후 재시도...');
+                    setTimeout(subscribe, 3000);
+                } else {
+                    showError('데이터 수신 실패. 인터넷을 확인해주세요. (' + err.code + ')');
+                }
+            });
+        }
+        
+        subscribe();
+        
+        // 8초 안에 데이터 못 받으면 재시도
+        setTimeout(() => {
+            if(!dataReceived && retryCount === 0) {
+                if(window.diagLog) window.diagLog('⚠️ 8초 무응답, 강제 재시도');
+                retryCount++;
+                subscribe();
+            }
+        }, 8000);
+        
+        // 20초 안에도 못 받으면 최종 에러
+        setTimeout(() => {
+            if(!dataReceived) {
+                if(window.diagLog) window.diagLog('⚠️ 20초 타임아웃');
+                showError('연결이 너무 오래 걸립니다. 인터넷 확인 후 새로고침해주세요.');
+            }
+        }, 20000);
+    }
+    window.startViewer = startViewer;
+    
+    function loadDataForCurrentDate() {
+        if(!allFirebaseData) return;
+        let v = allFirebaseData;
+        
+        let namesEntry = v['cNames_Premium_vFinal'];
+        cNames = {};
+        if(namesEntry && namesEntry.value) {
+            try { cNames = JSON.parse(namesEntry.value); } catch(e) {}
+        }
+        let exitedEntry = v['cExited_Premium_vFinal'];
+        exited = [];
+        if(exitedEntry && exitedEntry.value) {
+            try { exited = JSON.parse(exitedEntry.value); } catch(e) {}
+        }
+        let periodEntry = v['cPeriods_Premium_vFinal'];
+        periodEntries = [];
+        if(periodEntry && periodEntry.value) {
+            try { periodEntries = JSON.parse(periodEntry.value); } catch(e) {}
+        }
+        
+        ros = {};
+        let rosEntry = v['cRos_Premium_vFinal_' + currentDate];
+        if(rosEntry && rosEntry.value) {
+            try { ros = JSON.parse(rosEntry.value); } catch(e) {}
+        }
+        
+        teamInfo = { t1_c: 0, t1_f: 0, t2_c: 0, t2_f: 0, t3_c: 0, t3_f: 0, sn1: 1, sn2: 1, sn3: 1 };
+        let tmEntry = v['cTm_Premium_vFinal_' + currentDate];
+        if(tmEntry && tmEntry.value) {
+            try {
+                let t = JSON.parse(tmEntry.value);
+                teamInfo = {
+                    t1_c: parseInt(t.t1_c) || 0,
+                    t1_f: parseInt(t.t1_f) || 0,
+                    t2_c: parseInt(t.t2_c) || 0,
+                    t2_f: parseInt(t.t2_f) || 0,
+                    t3_c: parseInt(t.t3_c) || 0,
+                    t3_f: parseInt(t.t3_f) || 0,
+                    sn1: parseInt(t.sn1) || 1,
+                    sn2: parseInt(t.sn2) || 1,
+                    sn3: parseInt(t.sn3) || 1,
+                };
+            } catch(e) {}
+        }
+        
+        for(let id of exited) ros[id] = '결번';
+        
+        for(let p of periodEntries) {
+            if(currentDate >= p.start && currentDate <= p.end) {
+                if(ros[p.id] === '결번') continue;
+                let cur = ros[p.id] || '';
+                let fixedTokens = (cur.match(/\[\d부\s*\d+번\]/g) || []).join('') + (cur.includes('[3부유지]') ? '[3부유지]' : '');
+                let baseCat = cur.replace(/\[\d부\s*\d+번\]/g, '').replace('[3부유지]', '').trim();
+                if(baseCat === p.status) continue;
+                ros[p.id] = fixedTokens ? p.status + ' ' + fixedTokens : p.status;
+            }
+        }
+    }
+    
+    function changeDate(delta) {
+        let d = new Date(currentDate);
+        d.setDate(d.getDate() + delta);
+        let newDate = d.toISOString().split('T')[0];
+        currentDate = newDate;
+        document.getElementById('date_input').value = newDate;
+        loadDataForCurrentDate();
+        renderAll();
+        // ★ 날짜 바뀌면 시뮬레이션도 그 날짜 데이터로 새로 로드
+        if(window.simUIInited) initSimUI();
+        updateLastRefresh();
+    }
+    window.changeDate = changeDate;
+    
+    function onDateInputChange() {
+        let newDate = document.getElementById('date_input').value;
+        if(newDate) {
+            currentDate = newDate;
+            loadDataForCurrentDate();
+            renderAll();
+            // ★ 날짜 바뀌면 시뮬레이션도 그 날짜 데이터로 새로 로드
+            if(window.simUIInited) initSimUI();
+            updateLastRefresh();
+        }
+    }
+    window.onDateInputChange = onDateInputChange;
+    
+    function updateLastRefresh() {
+        let now = new Date();
+        let h = ('0' + now.getHours()).slice(-2);
+        let m = ('0' + now.getMinutes()).slice(-2);
+        document.getElementById('update_text').textContent = h + ':' + m;
+    }
+    
+    function switchTab(tab) {
+        currentTab = tab;
+        document.getElementById('view_avail').style.display = (tab === 'avail') ? 'block' : 'none';
+        document.getElementById('view_deploy').style.display = (tab === 'deploy') ? 'block' : 'none';
+        document.getElementById('view_sim').style.display = (tab === 'sim') ? 'block' : 'none';
+        document.getElementById('tab_avail').className = (tab === 'avail') ? 'tab act' : 'tab';
+        document.getElementById('tab_deploy').className = (tab === 'deploy') ? 'tab act' : 'tab';
+        document.getElementById('tab_sim').className = (tab === 'sim') ? 'tab act' : 'tab';
+        
+        // 시뮬레이션 탭 진입 시 UI 초기화 (한 번만)
+        if(tab === 'sim' && !window.simUIInited) {
+            initSimUI();
+            window.simUIInited = true;
+        }
+    }
+    window.switchTab = switchTab;
+    
+    // ==========================================
+    // 🔄 내 시뮬레이션 (본인 폰에만 저장, 날짜별 분리)
+    // ==========================================
+    const MY_SIM_KEY_PREFIX = 'caddie_my_sim_v2_';  // 날짜별로 분리 (v2)
+    let mySimData = { prev: {}, today: {} };
+    
+    function getMySimKey() {
+        return MY_SIM_KEY_PREFIX + currentDate;
+    }
+    
+    function loadMySim() {
+        try {
+            let s = localStorage.getItem(getMySimKey());
+            mySimData = s ? JSON.parse(s) : { prev: {}, today: {} };
+            if(!mySimData.prev) mySimData.prev = {};
+            if(!mySimData.today) mySimData.today = {};
+        } catch(e) {
+            mySimData = { prev: {}, today: {} };
+        }
+    }
+    
+    function saveMySim() {
+        localStorage.setItem(getMySimKey(), JSON.stringify(mySimData));
+    }
+    
+    function initSimUI() {
+        loadMySim();
+        
+        // 전일 10줄
+        let prevHtml = '';
+        for(let i = 1; i <= 10; i++) {
+            let d = mySimData.prev[i] || {};
+            prevHtml += `<div class="sim-row">
+                <span class="sim-num">${i}.</span>
+                <input type="number" id="sim_prev_a_${i}" value="${d.a || ''}" oninput="onSimInput()">
+                <span class="swap-icon">🔄</span>
+                <input type="number" id="sim_prev_b_${i}" value="${d.b || ''}" oninput="onSimInput()">
+            </div>`;
+        }
+        document.getElementById('sim_prev_list').innerHTML = prevHtml;
+        
+        // 당일 10줄
+        let todayHtml = '';
+        for(let i = 1; i <= 10; i++) {
+            let d = mySimData.today[i] || {};
+            todayHtml += `<div class="sim-row">
+                <span class="sim-num">${i}.</span>
+                <input type="number" id="sim_today_a_${i}" value="${d.a || ''}" oninput="onSimInput()">
+                <span class="swap-icon">🔄</span>
+                <input type="number" id="sim_today_b_${i}" value="${d.b || ''}" oninput="onSimInput()">
+            </div>`;
+        }
+        document.getElementById('sim_today_list').innerHTML = todayHtml;
+        
+        renderSimSummary();
+    }
+    
+    function onSimInput() {
+        // 입력값 → mySimData에 저장
+        let newPrev = {};
+        let newToday = {};
+        
+        for(let i = 1; i <= 10; i++) {
+            let pA = document.getElementById('sim_prev_a_' + i).value.trim();
+            let pB = document.getElementById('sim_prev_b_' + i).value.trim();
+            if(pA && pB) newPrev[i] = { a: pA, b: pB };
+            
+            let tA = document.getElementById('sim_today_a_' + i).value.trim();
+            let tB = document.getElementById('sim_today_b_' + i).value.trim();
+            if(tA && tB) newToday[i] = { a: tA, b: tB };
+        }
+        
+        mySimData.prev = newPrev;
+        mySimData.today = newToday;
+        saveMySim();
+        
+        renderSimSummary();
+        
+        // ★ 배치표도 즉시 갱신 (시뮬레이션 swap 반영)
+        let data = computeAssignment();
+        if(!data.noResult) {
+            renderDeploy(data);
+        }
+    }
+    window.onSimInput = onSimInput;
+    
+    function clearMySim(which) {
+        if(!confirm((which === 'prev' ? '전일' : '당일') + ' 대기바꿈을 모두 지우시겠습니까?')) return;
+        if(which === 'prev') mySimData.prev = {};
+        else mySimData.today = {};
+        saveMySim();
+        initSimUI();
+        
+        // ★ 배치표도 갱신
+        let data = computeAssignment();
+        if(!data.noResult) {
+            renderDeploy(data);
+        }
+    }
+    window.clearMySim = clearMySim;
+    
+    function renderSimSummary() {
+        // 횟수 체크
+        let counts = {};  // { 캐디번호: { prev: N, today: N } }
+        function addCount(num, kind) {
+            if(!counts[num]) counts[num] = { prev: 0, today: 0 };
+            counts[num][kind]++;
+        }
+        for(let i in mySimData.prev) {
+            let d = mySimData.prev[i];
+            if(d.a) addCount(d.a, 'prev');
+            if(d.b) addCount(d.b, 'prev');
+        }
+        for(let i in mySimData.today) {
+            let d = mySimData.today[i];
+            if(d.a) addCount(d.a, 'today');
+            if(d.b) addCount(d.b, 'today');
+        }
+        
+        let checkHtml = '';
+        let nums = Object.keys(counts).sort((a, b) => parseInt(a) - parseInt(b));
+        if(nums.length === 0) {
+            checkHtml = '<span style="color:var(--text-soft); font-weight:700;">입력하면 여기에 표시됩니다</span>';
+        } else {
+            for(let n of nums) {
+                let c = counts[n];
+                let prevOver = c.prev > 1;
+                let todayOver = c.today > 2;
+                let isOver = prevOver || todayOver;
+                let cName = cNames[n] ? ' ' + cNames[n] : '';
+                let detail = [];
+                if(c.prev) detail.push('전' + c.prev + (prevOver ? '⚠️' : ''));
+                if(c.today) detail.push('당' + c.today + (todayOver ? '⚠️' : ''));
+                checkHtml += `<span class="sim-check-badge ${isOver ? 'over' : ''}">${n}${cName} (${detail.join('/')})</span>`;
+            }
+        }
+        document.getElementById('sim_check').innerHTML = checkHtml;
+        
+        // 대기바꿈 현황 (체인 추적)
+        let chains = computeSimChains();
+        let historyHtml = '';
+        if(chains.length === 0) {
+            historyHtml = '<span style="color:var(--text-soft); font-weight:700;">입력하면 여기에 표시됩니다</span>';
+        } else {
+            for(let chain of chains) {
+                // 시작: 파란색 박스
+                let firstId = chain[0];
+                let html = '<span style="color:#0284c7; font-weight:900; background:#e0f2fe; padding:2px 5px; border-radius:4px; border:1.5px solid #bae6fd; white-space:nowrap;">' + firstId + '</span>';
+                
+                // 중간 단계
+                for(let i = 1; i < chain.length - 1; i++) {
+                    html += '<span style="color:#cbd5e1; margin:0 3px;">➔</span>';
+                    html += '<span style="color:var(--text-muted); font-weight:800;">' + chain[i] + '</span>';
+                }
+                
+                // 끝: 빨간색 박스 (최종 자리)
+                let lastId = chain[chain.length-1];
+                let lastName = cNames[lastId] ? ' ' + cNames[lastId] : '';
+                html += '<span style="color:#cbd5e1; margin:0 3px;">➔</span>';
+                html += '<span style="color:#ef4444; font-weight:900; background:#fef2f2; padding:2px 5px; border-radius:4px; border:1.5px solid #fca5a5; white-space:nowrap;">' + lastId + lastName + '</span>';
+                
+                historyHtml += '<div class="sim-history-item" style="display:flex; align-items:center; flex-wrap:wrap; gap:2px; overflow-x:auto;">' + html + '</div>';
+            }
+        }
+        document.getElementById('sim_history').innerHTML = historyHtml;
+    }
+    
+    // 대기바꿈 체인 계산 (운영자 알고리즘과 동일)
+    function computeSimChains() {
+        // 모든 swap 데이터를 시간순으로 정렬 (전일 먼저, 당일 나중)
+        let allSwaps = [];
+        let prevKeys = Object.keys(mySimData.prev || {}).sort((a, b) => parseInt(a) - parseInt(b));
+        for(let k of prevKeys) {
+            let d = mySimData.prev[k];
+            if(d.a && d.b) allSwaps.push(d);
+        }
+        let todayKeys = Object.keys(mySimData.today || {}).sort((a, b) => parseInt(a) - parseInt(b));
+        for(let k of todayKeys) {
+            let d = mySimData.today[k];
+            if(d.a && d.b) allSwaps.push(d);
+        }
+        
+        // 각 슬롯의 캐디 추적 (초기 = 자기 번호)
+        let slotHistory = {};
+        for(let i = 1; i <= 200; i++) {
+            slotHistory[i] = [i];
+        }
+        
+        // 각 swap 순서대로 처리
+        for(let swap of allSwaps) {
+            let A = parseInt(swap.a);
+            let B = parseInt(swap.b);
+            if(!A || !B || A === B) continue;
+            
+            // A의 현재 위치(슬롯)와 B의 현재 위치(슬롯) 찾기
+            let slotA = null, slotB = null;
+            for(let s = 1; s <= 200; s++) {
+                let hist = slotHistory[s];
+                if(hist[hist.length - 1] === A) slotA = s;
+                if(hist[hist.length - 1] === B) slotB = s;
+            }
+            if(slotA && slotB) {
+                slotHistory[slotA].push(B); // 슬롯A 자리에 B가 옴
+                slotHistory[slotB].push(A); // 슬롯B 자리에 A가 옴
+            }
+        }
+        
+        // 체인 길이 2 이상인 것만 출력 (= swap에 참여한 슬롯만)
+        let chains = [];
+        for(let i = 1; i <= 200; i++) {
+            if(slotHistory[i] && slotHistory[i].length > 1) {
+                chains.push(slotHistory[i]);
+            }
+        }
+        return chains;
+    }
+    
+    function renderAll() {
+        let data = computeAssignment();
+        
+        // ★ 운영자가 아직 배정 자동 생성 안 한 경우
+        if(data.noResult) {
+            document.getElementById('summary').innerHTML = `
+                <span style="color:var(--text-main); font-size:15px;">📅 <b>${formatCurrentDate()}</b></span>
+                <span style="background:#fffbeb; padding:6px 12px; border-radius:10px; border:2px solid #f59e0b; color:#92400e; font-weight:900;">
+                    ⚠️ 아직 배정이 안 됐어요. 운영자가 가용표를 만들 때까지 기다려주세요.
+                </span>
+            `;
+            document.getElementById('result').innerHTML = '<div style="grid-column: 1/-1; padding:60px 20px; text-align:center; color:var(--text-muted); font-weight:700; background:#f8fafc;">운영자가 [🚀 배정 자동 생성] 버튼을 누르면 여기 표시됩니다.</div>';
+            document.getElementById('deploy_area').innerHTML = '<div style="text-align:center; padding:60px 20px; color:var(--text-muted); font-weight:700;">운영자가 [🚀 배정 자동 생성] 버튼을 누르면 여기 표시됩니다.</div>';
+            return;
+        }
+        
+        renderAvail(data);
+        renderDeploy(data);
+    }
+    
+    function formatCurrentDate() {
+        let d = new Date(currentDate);
+        let mon = d.getMonth() + 1;
+        let day = d.getDate();
+        let week = ['일','월','화','수','목','금','토'][d.getDay()];
+        return currentDate.substring(0,4) + '년 ' + mon + '월 ' + day + '일 (' + week + ')';
+    }
+    
+    function computeAssignment() {
+        // ★ 운영자가 계산해서 저장한 결과를 그대로 사용 (자체 계산 안 함)
+        let info = {};
+        for(let i = 1; i <= 150; i++) info[i] = { st: ros[i] || '', as: [] };
+        let result = { 1: {}, 2: {}, 3: {} };
+        
+        if(!allFirebaseData) return { info: info, result: result };
+        
+        // 운영자가 저장한 배정 결과 가져오기
+        let resultEntry = allFirebaseData['cResult_Premium_vFinal_' + currentDate];
+        if(!resultEntry || !resultEntry.value) {
+            // 결과 없음 = 운영자가 아직 배정 안 함
+            return { info: info, result: result, noResult: true };
+        }
+        
+        try {
+            let rData = JSON.parse(resultEntry.value);
+            
+            // info 복원 (캐디별 카테고리/배정 상태)
+            if(rData.info) {
+                for(let id in rData.info) {
+                    let e = rData.info[id];
+                    info[id] = { st: e.st || '', as: e.as || [] };
+                }
+            }
+            
+            // 배치표 결과 복원
+            // shift1, shift2, shift3는 [cId, cId, cId, ...] 배열 (1번 슬롯=index 0)
+            // ★ 운영자처럼 현재팀수까지만 배치표에 포함 (추가 캐디는 가용표에만 표시)
+            for(let sh = 1; sh <= 3; sh++) {
+                let arr = rData['shift' + sh];
+                if(arr && Array.isArray(arr)) {
+                    for(let k = 0; k < arr.length; k++) {
+                        if(arr[k]) {
+                            result[sh][k+1] = parseInt(arr[k]);
+                        }
+                    }
+                }
+            }
+            
+            return { info: info, result: result, hasResult: true };
+        } catch(e) {
+            console.warn('[Viewer] 결과 파싱 실패:', e);
+            return { info: info, result: result, parseError: true };
+        }
+    }
+    
+    function renderAvail(data) {
+        let info = data.info;
+        
+        let d = new Date(currentDate);
+        let mon = d.getMonth() + 1;
+        let day = d.getDate();
+        let week = ['일','월','화','수','목','금','토'][d.getDay()];
+        let formattedDate = currentDate.substring(0,4) + '년 ' + mon + '월 ' + day + '일 (' + week + ')';
+        
+        let allActive = [];
+        for(let i = 1; i <= 150; i++) {
+            let s = info[i].st;
+            if(s === '결번') continue;
+            let baseCat = s.replace(/\[\d부\s*\d+번\]/g, '').replace('[3부유지]', '').trim();
+            if(!['휴무','휴가','경조사','장병','타구사고'].includes(baseCat)) {
+                allActive.push(i);
+            }
+        }
+        let active3rd = allActive.filter(i => i >= 131).length;
+        let activeHouse = allActive.length - active3rd;
+        let activeCount = allActive.length;
+        
+        let t1_c = teamInfo.t1_c, t1_f = teamInfo.t1_f;
+        let t2_c = teamInfo.t2_c, t2_f = teamInfo.t2_f;
+        let t3_c = teamInfo.t3_c, t3_f = teamInfo.t3_f;
+        
+        let summaryHtml = '<span><span style="color:var(--text-main); margin-right:15px; font-size:16px;">📅 <b>' + formattedDate + '</b></span>';
+        summaryHtml += '<span style="background:white; padding:4px 10px; border-radius:8px; font-size:14px; border:2px solid var(--border-strong); font-weight:900;">👥 <b style="color:var(--primary);">' + activeCount + '명</b> <span style="font-size:11px; color:var(--text-muted);">(하우스:' + activeHouse + '/3부:' + active3rd + ')</span></span></span>';
+        summaryHtml += '<span style="background:white; padding:4px 10px; border-radius:8px; font-size:13px; border:2px solid var(--border-strong);"><span style="color:#e74c3c; font-weight:900;">1부:' + t1_c + '(' + t1_f + ')</span> <span style="color:#94a3b8;">|</span> <span style="color:#0984e3; font-weight:900;">2부:' + t2_c + '(' + t2_f + ')</span> <span style="color:#94a3b8;">|</span> <span style="color:#27ae60; font-weight:900;">3부:' + t3_c + '(' + t3_f + ')</span></span>';
+        document.getElementById('summary').innerHTML = summaryHtml;
+        
+        let rh = '';
+        for(let i of displayOrder) {
+            let s = info[i].st;
+            let c = 'rc';
+            let isFixed = s.includes('[');
+            
+            if(s === '결번') {
+                rh += '<div class="rc ex"><span style="font-size:16px; font-weight:900; color:#cbd5e1;">' + i + '</span></div>';
+                continue;
+            }
+            
+            if(isFixed) c += ' fixed';
+            else if(s) c += ' cu';
+            
+            let nameStr = cNames[i] ? cNames[i] : '';
+            let badgeBorder = isFixed ? '#ef4444' : '#cbd5e1';
+            let topCol = isFixed ? '#e11d48' : '#0f172a';
+            let botCol = isFixed ? '#e11d48' : '#0f172a';
+            let midBrd = isFixed ? '#fecdd3' : '#e2e8f0';
+            
+            let nameClass = nameStr.length >= 4 ? 'name-len-long' : 'name-len-default';
+            let nameHtml = nameStr ? '<div style="height:20px; display:flex; align-items:center; justify-content:center; background:#ffffff; color:' + botCol + '; font-weight:900; border-top:1px solid ' + midBrd + '; white-space:nowrap; overflow:hidden;" class="' + nameClass + '">' + nameStr + '</div>' : '';
+            
+            let leftPart = '<div class="rc-left-badge" style="border-color:' + badgeBorder + '; background:#ffffff;"><div style="height:22px; display:flex; align-items:center; justify-content:center; background:#ffffff; color:' + topCol + '; font-size:15px; font-weight:900;">' + i + '</div>' + nameHtml + '</div>';
+            
+            let d_html = '';
+            let baseCat = s.replace(/\[\d부\s*\d+번\]/g, '').replace('[3부유지]', '').trim();
+            let catBadge = '';
+            if(baseCat) {
+                let bBg = '#f1f5f9', bCol = '#475569', bBrd = '#cbd5e1';
+                if(['휴무','휴가','경조사'].some(v => baseCat.includes(v))) { bBg='#fef2f2'; bCol='#ef4444'; bBrd='#fca5a5'; }
+                else if(['당번','배치','교육'].some(v => baseCat.includes(v))) { bBg='#fffbeb'; bCol='#d97706'; bBrd='#fcd34d'; }
+                else if(['장병','타구사고'].some(v => baseCat.includes(v))) { bBg='#e0e7ff'; bCol='#4f46e5'; bBrd='#c7d2fe'; }
+                
+                catBadge = '<span style="background:' + bBg + '; color:' + bCol + '; border:1px solid ' + bBrd + '; padding:3px 6px; border-radius:5px; font-size:12px; font-weight:900; white-space:nowrap; flex-shrink:0;">' + baseCat + '</span>';
+            }
+            
+            let shiftHtml = '';
+            if(info[i].as.length > 0) {
+                shiftHtml = info[i].as.map(function(a) {
+                    let isAdd = a.includes('추가');
+                    let baseText = a.replace('(추가)','').trim();
+                    let clBg = baseText === '1부' ? '#ef4444' : (baseText === '2부' ? '#3b82f6' : '#10b981');
+                    let clBrd = baseText === '1부' ? '#b91c1c' : (baseText === '2부' ? '#1d4ed8' : '#047857');
+                    let addBadge = isAdd ? '<span style="background:rgba(0,0,0,0.25); color:white; padding:1px 3px; border-radius:3px; font-size:9px; margin-left:3px; font-weight:900;">추가</span>' : '';
+                    return '<span style="border:2px solid ' + clBrd + '; background:' + clBg + '; color:white; padding:3px 6px; border-radius:5px; font-size:12px; font-weight:900; display:inline-flex; align-items:center; white-space:nowrap; flex-shrink:0;">' + baseText + addBadge + '</span>';
+                }).join('<span style="width:3px; flex-shrink:0;"></span>');
+            }
+            
+            d_html = '<div class="stat">' + catBadge + shiftHtml + '</div>';
+            
+            rh += '<div class="' + c + '" style="justify-content:flex-start; padding-left:4px;">' + leftPart + d_html + '</div>';
+        }
+        document.getElementById('result').innerHTML = rh;
+    }
+    
+    function renderDeploy(data) {
+        let deployArr = { 1: [], 2: [], 3: [] };
+        for(let sh = 1; sh <= 3; sh++) {
+            let slots = data.result[sh];
+            let curTm = teamInfo['t' + sh + '_c'];
+            // ★ 운영자처럼 현재팀수까지만 배열에 담음 (추가는 배치표에 안 나옴)
+            for(let i = 1; i <= curTm; i++) {
+                deployArr[sh][i-1] = slots[i] || '';
+            }
+        }
+        
+        // ★ 내 시뮬레이션 slotHistory 계산 (배열은 그대로 두고 표시만 체인으로)
+        computeSimSlotHistory();
+        
+        let d = new Date(currentDate);
+        let mon = d.getMonth() + 1;
+        let day = d.getDate();
+        let formattedDate = currentDate.substring(0,4) + '년 ' + mon + '월 ' + day + '일';
+        
+        let t1_title = '<span style="color:#e74c3c;">1부 ☀️</span> <span style="font-size:11px; color:#64748b;">(' + teamInfo.t1_c + '/' + teamInfo.t1_f + '팀)</span>';
+        let t2_title = '<span style="color:#0984e3;">2부 ⛅</span> <span style="font-size:11px; color:#64748b;">(' + teamInfo.t2_c + '/' + teamInfo.t2_f + '팀)</span>';
+        let t3_title = '<span style="color:#27ae60;">3부 🌙</span> <span style="font-size:11px; color:#64748b;">(' + teamInfo.t3_c + '/' + teamInfo.t3_f + '팀)</span>';
+        
+        let html = '';
+        if(teamInfo.t1_c > 0 || teamInfo.t1_f > 0) html += buildDeployHtml(formattedDate, t1_title, '#e74c3c', '#f8fafc', deployArr[1], teamInfo.t1_c, '1부');
+        if(teamInfo.t2_c > 0 || teamInfo.t2_f > 0) html += buildDeployHtml(formattedDate, t2_title, '#0984e3', '#f8fafc', deployArr[2], teamInfo.t2_c, '2부');
+        if(teamInfo.t3_c > 0 || teamInfo.t3_f > 0) html += buildDeployHtml(formattedDate, t3_title, '#27ae60', '#f8fafc', deployArr[3], teamInfo.t3_c, '3부');
+        
+        if(!html) {
+            html = '<div style="text-align:center; padding:40px; color:var(--text-soft); font-weight:700;">팀 수가 설정되지 않았습니다.</div>';
+        }
+        
+        document.getElementById('deploy_area').innerHTML = html;
+    }
+    
+    function hasSimData() {
+        loadMySim();
+        return Object.keys(mySimData.prev || {}).length > 0 || Object.keys(mySimData.today || {}).length > 0;
+    }
+    
+    // ★ 운영자 방식: 배열은 그대로 두고, slotHistory만 만듦
+    // 표시할 때 slotHistory[cId]가 있으면 체인으로 표시
+    let simSlotHistory = {};
+    
+    function computeSimSlotHistory() {
+        loadMySim();
+        simSlotHistory = {};
+        for(let i = 1; i <= 200; i++) {
+            simSlotHistory[i] = [i];
+        }
+        
+        // swap 시간순 (전일 → 당일)
+        let allSwaps = [];
+        let prevKeys = Object.keys(mySimData.prev || {}).sort((a, b) => parseInt(a) - parseInt(b));
+        for(let k of prevKeys) {
+            let d = mySimData.prev[k];
+            if(d.a && d.b) allSwaps.push({ a: parseInt(d.a), b: parseInt(d.b) });
+        }
+        let todayKeys = Object.keys(mySimData.today || {}).sort((a, b) => parseInt(a) - parseInt(b));
+        for(let k of todayKeys) {
+            let d = mySimData.today[k];
+            if(d.a && d.b) allSwaps.push({ a: parseInt(d.a), b: parseInt(d.b) });
+        }
+        
+        // 각 슬롯(원래 자리)의 캐디 추적
+        for(let swap of allSwaps) {
+            let A = swap.a, B = swap.b;
+            if(!A || !B || A === B) continue;
+            
+            let slotA = null, slotB = null;
+            for(let s = 1; s <= 200; s++) {
+                let hist = simSlotHistory[s];
+                if(hist[hist.length - 1] === A) slotA = s;
+                if(hist[hist.length - 1] === B) slotB = s;
+            }
+            if(slotA && slotB) {
+                simSlotHistory[slotA].push(B);
+                simSlotHistory[slotB].push(A);
+            }
+        }
+    }
+    
+    function buildSimChainHtml(seq) {
+        // 시작 (파란 박스)
+        let first = '<span style="color:#0284c7; font-weight:900; font-size:14px; background:#e0f2fe; padding:2px 5px; border-radius:4px; border:1.5px solid #bae6fd; white-space:nowrap;">' + seq[0] + '</span>';
+        
+        let arrowHtml = '<span style="color:#cbd5e1; font-size:11px; font-weight:900; display:inline-block; width:14px; text-align:center; flex-shrink:0;">➔</span>';
+        
+        // 끝 (빨간 박스 + 이름)
+        let finalId = seq[seq.length-1];
+        let finalName = cNames[finalId] ? ' <span style="font-size:12px; color:#ef4444;">' + cNames[finalId] + '</span>' : '';
+        let last = '<span style="color:#ef4444; font-weight:900; font-size:14px; background:#fef2f2; padding:2px 5px; border-radius:4px; border:1.5px solid #fca5a5; white-space:nowrap;">' + finalId + finalName + '</span>';
+        
+        let chain = first;
+        for(let i = 1; i < seq.length - 1; i++) {
+            chain += arrowHtml + '<span style="color:var(--text-muted); font-size:14px; font-weight:800; white-space:nowrap;">' + seq[i] + '</span>';
+        }
+        chain += arrowHtml + last;
+        
+        return '<div class="scroll-hide" style="display:inline-flex; flex-wrap:nowrap; align-items:center; gap:2px; height:100%; white-space:nowrap;">' + chain + '</div>';
+    }
+    
+    function buildDeployHtml(dateText, title, cColor, bgColor, arr, fullTm, shiftName) {
+        // ★ fullTm은 현재팀수(curTm) — 운영자처럼 현재팀수까지만 표시
+        let rowsHtml = '';
+        
+        for(let i = 1; i <= 30; i++) {
+            // ★ 운영자처럼 6단위 구분선만
+            let bB = (i % 6 === 0) ? 'border-bottom: 3px solid var(--border-strong) !important;' : 'border-bottom: 1px solid #cbd5e1 !important;';
+            
+            // -- 왼쪽 열 --
+            let cL = arr[i-1] || '';
+            let cLInt = parseInt(cL);
+            let isFL = cL && ros[cLInt] && ros[cLInt].includes('[');
+            let isDedL = cL && cLInt >= 131;
+            
+            let dL = '';
+            if(cL !== '') {
+                // ★ 시뮬레이션 체인이 있으면 체인 표시
+                if(simSlotHistory[cLInt] && simSlotHistory[cLInt].length > 1) {
+                    dL = buildSimChainHtml(simSlotHistory[cLInt]);
+                } else {
+                    let nameColorL = isFL ? '#f43f5e' : (isDedL ? '#15803d' : '#334155');
+                    let cLName = cNames[cLInt] ? ' <span style="font-size:13px; color:' + nameColorL + '; font-weight:900; margin-left:6px;">' + cNames[cLInt] + '</span>' : '';
+                    dL = '<span style="font-size:14px; font-weight:900;">' + cL + '</span>' + cLName;
+                }
+            }
+            let tdSL;
+            if(isFL) tdSL = 'background:#fef2f2 !important; color:#ef4444 !important; box-shadow: inset 4px 0 0 0 #f43f5e !important;';
+            else if(isDedL) tdSL = 'background:#f0fdf4 !important; color:#15803d !important; box-shadow: inset 4px 0 0 0 #22c55e !important;';
+            else tdSL = 'color:' + cColor + ';';
+            
+            // -- 오른쪽 열 --
+            let rIdx = i + 30;
+            let cR = arr[rIdx-1] || '';
+            let cRInt = parseInt(cR);
+            let isFR = cR && ros[cRInt] && ros[cRInt].includes('[');
+            let isDedR = cR && cRInt >= 131;
+            
+            let dR = '';
+            if(cR !== '') {
+                if(simSlotHistory[cRInt] && simSlotHistory[cRInt].length > 1) {
+                    dR = buildSimChainHtml(simSlotHistory[cRInt]);
+                } else {
+                    let nameColorR = isFR ? '#f43f5e' : (isDedR ? '#15803d' : '#334155');
+                    let cRName = cNames[cRInt] ? ' <span style="font-size:13px; color:' + nameColorR + '; font-weight:900; margin-left:6px;">' + cNames[cRInt] + '</span>' : '';
+                    dR = '<span style="font-size:14px; font-weight:900;">' + cR + '</span>' + cRName;
+                }
+            }
+            let tdSR;
+            if(isFR) tdSR = 'background:#fef2f2 !important; color:#ef4444 !important; box-shadow: inset 4px 0 0 0 #f43f5e !important;';
+            else if(isDedR) tdSR = 'background:#f0fdf4 !important; color:#15803d !important; box-shadow: inset 4px 0 0 0 #22c55e !important;';
+            else tdSR = 'color:' + cColor + ';';
+            
+            rowsHtml += '<tr>' +
+                '<td class="d-rank" style="border-right:2px solid var(--border-strong); background:#f8fafc; ' + bB + '">' + ((i <= fullTm) ? i : '') + '</td>' +
+                '<td style="' + tdSL + ' ' + bB + '"><div class="scroll-hide">' + dL + '</div></td>' +
+                '<td class="d-rank" style="border-left:2px solid ' + cColor + '; border-right:2px solid var(--border-strong); background:#f8fafc; ' + bB + '">' + ((rIdx <= fullTm) ? rIdx : '') + '</td>' +
+                '<td style="' + tdSR + ' ' + bB + '"><div class="scroll-hide">' + dR + '</div></td>' +
+                '</tr>';
+        }
+        
+        return '<div class="d-col" style="border: 3px solid ' + cColor + ';">' +
+            '<div class="d-title" style="background:' + bgColor + '; border-bottom: 3px solid ' + cColor + '; color: var(--text-main);">' +
+                '<span style="font-size:11px; color:var(--text-muted); font-weight:400;">' + dateText + '</span> ' + title +
+            '</div>' +
+            '<table class="d-table">' +
+                '<colgroup>' +
+                    '<col style="width: 36px;">' +
+                    '<col style="width: auto;">' +
+                    '<col style="width: 36px;">' +
+                    '<col style="width: auto;">' +
+                '</colgroup>' +
+                '<tbody>' + rowsHtml + '</tbody>' +
+            '</table>' +
+        '</div>';
+    }
+    
+    setInterval(updateLastRefresh, 60000);
+</script>
+
+</body>
+</html>
