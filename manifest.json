@@ -1,0 +1,25 @@
+{
+  "name": "그랜드 캐디",
+  "short_name": "그랜드캐디",
+  "description": "인천그랜드CC 캐디 근무·대기바꿈 확인",
+  "start_url": "./viewer.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#2D5F3E",
+  "theme_color": "#2D5F3E",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
